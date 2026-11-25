@@ -1110,7 +1110,7 @@ void Application::render()
 			&viewportData
 		);
 
-		vkCmdDraw(res.commandBuffer, 300, 1, 0, 0);
+		vkCmdDraw(res.commandBuffer, 900, 1, 0, 0);
 
 		// End dynamic rendering
 		vkCmdEndRendering(res.commandBuffer);
