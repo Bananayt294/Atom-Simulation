@@ -127,6 +127,12 @@ vec2 circleTriVertex(Particle p, int vertexIdx) {
 
 // Draw an individual particle.
 void drawParticle(Particle p, int vertexIdx) {
+    for (int i = 0; i <= SEGMENTS; i++) {
+        float angle = 2.0f * PI * i/SEGMENTS;
+        float x = cos(angle) * ORBITAL_DISTANCE;
+        float y = sin(angle) * ORBITAL_DISTANCE;
+    }
+
 
     vec2 pt = circleTriVertex(p, vertexIdx);
 
