@@ -1,61 +1,51 @@
 ﻿{
-  "version": 3,
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
   "configurePresets": [
     {
-      "name": "windows-base",
-      "hidden": true,
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/out/build/${presetName}",
-      "installDir": "${sourceDir}/out/install/${presetName}",
-      "cacheVariables": {
-        "CMAKE_C_COMPILER": "cl.exe",
-        "CMAKE_CXX_COMPILER": "cl.exe"
-      },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      }
-    },
-    {
-      "name": "x64-debug",
-      "displayName": "x64 Debug",
-      "inherits": "windows-base",
+      "name": "windows-msvc",
+      "displayName": "Windows MSVC x64",
+      "generator": "Visual Studio 18 2026",
       "architecture": {
         "value": "x64",
-        "strategy": "external"
+        "strategy": "set"
       },
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      }
-    },
-    {
-      "name": "x64-release",
-      "displayName": "x64 Release",
-      "inherits": "x64-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
-    },
-    {
-      "name": "x86-debug",
-      "displayName": "x86 Debug",
-      "inherits": "windows-base",
-      "architecture": {
-        "value": "x86",
-        "strategy": "external"
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "toolchainFile": "D:/vcpkg/scripts/buildsystems/vcpkg.cmake",
+
+      "environment": {
+        "VCPKG_ROOT": "D:/vcpkg",
+        "VULKAN_SDK": "D:/Vulkan"
       },
+
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "Vulkan_INCLUDE_DIR": "D:/Vulkan/Include",
+        "Vulkan_LIBRARY": "D:/Vulkan/Lib/vulkan-1.lib",
+
+        "Vulkan_volk_LIBRARY": "D:/Vulkan/Lib/volk.lib",
+        "Vulkan_volk_DEBUG_LIBRARY": "D:/Vulkan/Lib/volkd.lib",
+
+        "Vulkan_shaderc_combined_LIBRARY": "D:/Vulkan/Lib/shaderc_combined.lib",
+        "Vulkan_shaderc_combined_DEBUG_LIBRARY": "D:/Vulkan/Lib/shaderc_combinedd.lib"
       }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug",
+      "configurePreset": "windows-msvc",
+      "configuration": "Debug"
     },
     {
-      "name": "x86-release",
-      "displayName": "x86 Release",
-      "inherits": "x86-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
-      }
+      "name": "release",
+      "displayName": "Release",
+      "configurePreset": "windows-msvc",
+      "configuration": "Release"
     }
   ]
 }

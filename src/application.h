@@ -29,6 +29,10 @@ class Application
 	constexpr static VkFormat swapchainFormat{ VK_FORMAT_B8G8R8A8_SRGB };
 	constexpr static VkFormat depthFormat{ VK_FORMAT_D32_SFLOAT };
 
+	struct Viewport {
+		float xScale;
+		float time;
+	};
 	SDL_Window* window = nullptr;
 	uint32_t width = 1280;
 	uint32_t height = 720;

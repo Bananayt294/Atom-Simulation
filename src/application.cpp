@@ -6,21 +6,34 @@
 #include <Volk/volk.h>
 #define VMA_IMPLEMENTATION
 #include <vma/vk_mem_alloc.h>
-
+#include <filesystem>
 #include <iostream>
 
-void Application::showError(const std::string &errorMessasge) const
-{
-	SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", errorMessasge.c_str(), window);
-}
 
 bool Application::initialize()
 {
-	SDL_InitSubSystem(SDL_INIT_VIDEO);
-	window = SDL_CreateWindow("Vulkan Learning", width, height, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+	if (!SDL_Init(SDL_INIT_VIDEO))
+	{
+		showError(
+			std::string("SDL initialization failed: ") +
+			SDL_GetError()
+		);
+		return false;
+	}
+
+	window = SDL_CreateWindow(
+		"Vulkan Learning",
+		width,
+		height,
+		SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
+	);
+
 	if (!window)
 	{
-		showError("Error creating window");
+		showError(
+			std::string("SDL window creation failed: ") +
+			SDL_GetError()
+		);
 		return false;
 	}
 
@@ -32,71 +45,117 @@ bool Application::initialize()
 	return true;
 }
 
+
+
 void Application::shutdown()
 {
-	// wait in case resources are in use
-	vkDeviceWaitIdle(device);
+	// Only perform device cleanup if the logical device exists.
+	if (device != VK_NULL_HANDLE)
+	{
+		// Wait for GPU operations to finish.
+		if (vkDeviceWaitIdle != nullptr)
+		{
+			vkDeviceWaitIdle(device);
+		}
 
-	// frame / sync object cleanup
-	if (timelineSemaphore)
-	{
-		vkDestroySemaphore(device, timelineSemaphore, nullptr);
-	}
-	for (auto &res : frameResources)
-	{
-		vkDestroySemaphore(device, res.imageAcquiredSemaphore, nullptr);
-		vkDestroyCommandPool(device, res.commandPool, nullptr); // destroys buffers implicitly
+		// Synchronization resources.
+		if (timelineSemaphore != VK_NULL_HANDLE)
+		{
+			vkDestroySemaphore(device, timelineSemaphore, nullptr);
+			timelineSemaphore = VK_NULL_HANDLE;
+		}
+
+		for (auto& res : frameResources)
+		{
+			if (res.imageAcquiredSemaphore != VK_NULL_HANDLE)
+			{
+				vkDestroySemaphore(
+					device,
+					res.imageAcquiredSemaphore,
+					nullptr
+				);
+
+				res.imageAcquiredSemaphore = VK_NULL_HANDLE;
+			}
+
+			if (res.commandPool != VK_NULL_HANDLE)
+			{
+				vkDestroyCommandPool(
+					device,
+					res.commandPool,
+					nullptr
+				);
+
+				res.commandPool = VK_NULL_HANDLE;
+			}
+		}
+
+		// Pipeline resources.
+		if (pipelineLayout != VK_NULL_HANDLE)
+		{
+			vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+			pipelineLayout = VK_NULL_HANDLE;
+		}
+
+		if (pipeline != VK_NULL_HANDLE)
+		{
+			vkDestroyPipeline(device, pipeline, nullptr);
+			pipeline = VK_NULL_HANDLE;
+		}
+
+		// Shader modules.
+		if (vertShader != VK_NULL_HANDLE)
+		{
+			vkDestroyShaderModule(device, vertShader, nullptr);
+			vertShader = VK_NULL_HANDLE;
+		}
+
+		if (fragShader != VK_NULL_HANDLE)
+		{
+			vkDestroyShaderModule(device, fragShader, nullptr);
+			fragShader = VK_NULL_HANDLE;
+		}
+
+		// Swapchain resources.
+		destroySwapchain();
+
+		// VMA allocator.
+		if (vmaAllocator != VK_NULL_HANDLE)
+		{
+			vmaDestroyAllocator(vmaAllocator);
+			vmaAllocator = VK_NULL_HANDLE;
+		}
+
+		// Destroy logical device.
+		vkDestroyDevice(device, nullptr);
+		device = VK_NULL_HANDLE;
 	}
 
-	// pipeline cleanup
-	if (pipelineLayout)
-	{
-		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-	}
-	if (pipeline)
-	{
-		vkDestroyPipeline(device, pipeline, nullptr);
-	}
-
-	// cleanup shaders
-	if (vertShader)
-	{
-		vkDestroyShaderModule(device, vertShader, nullptr);
-	}
-	if (fragShader)
-	{
-		vkDestroyShaderModule(device, fragShader, nullptr);
-	}
-
-	// cleanup swapchain
-	destroySwapchain();
-
-	// VMA
-	if (vmaAllocator)
-	{
-		vmaDestroyAllocator(vmaAllocator);
-	}
-
-	// cleanup Vulkan
-	if (surface)
+	// Surface.
+	if (surface != VK_NULL_HANDLE &&
+		vulkanInstance != VK_NULL_HANDLE)
 	{
 		vkDestroySurfaceKHR(vulkanInstance, surface, nullptr);
+		surface = VK_NULL_HANDLE;
 	}
-	if (device)
-	{
-		vkDestroyDevice(device, nullptr);
-	}
-	if (vulkanInstance)
+
+	// Instance.
+	if (vulkanInstance != VK_NULL_HANDLE)
 	{
 		vkDestroyInstance(vulkanInstance, nullptr);
+		vulkanInstance = VK_NULL_HANDLE;
 	}
+
+	// Finalize Volk after Vulkan cleanup.
 	volkFinalize();
 
-	// cleanup SDL
+	// SDL cleanup.
 	if (window)
 	{
 		SDL_DestroyWindow(window);
+		window = nullptr;
 	}
+
 	SDL_Quit();
 }
 
@@ -117,6 +176,7 @@ void Application::run()
 			{
 				width = event.window.data1;
 				height = event.window.data2;
+				requireSwapchainRecreate = true;
 				break;
 			}
 		}
@@ -392,6 +452,18 @@ bool Application::createDevice(VkPhysicalDevice physicalDevice)
 		return false;
 	}
 
+	// Load device-specific Vulkan function pointers.
+	volkLoadDevice(device);
+
+	// Grab the VkQueue object.
+	vkGetDeviceQueue(device, gfxQueueFamIdx, 0, &gfxQueue);
+
+	if (!gfxQueue)
+	{
+		showError("Couldn't get the graphics queue");
+		return false;
+	}
+
 	// grab the VkQueue object finally
 	vkGetDeviceQueue(device, gfxQueueFamIdx, 0, &gfxQueue);
 	if (!gfxQueue)
@@ -577,12 +649,12 @@ void Application::destroySwapchain()
 VkShaderModule Application::createShaderModule(const std::string &fileName, shaderc_shader_kind kind) const
 {
 	// read shader file from disk
-	const std::string shaderPath = "src/shaders/" + fileName;
-	const std::string src = readTextFile(shaderPath);
+	const std::filesystem::path shaderPath = std::filesystem::path(ATOM_SHADER_DIR) / fileName;
+	const std::string src = readTextFile(shaderPath.string());
 	if (src.empty())
 	{
-		showError("Specified shader file doesn't exist: " + shaderPath);
-		return nullptr;
+		showError("Specified shader file doesn't exist: " + shaderPath.string());
+		return VK_NULL_HANDLE;
 	}
 
 	// compile the shader to SPIR-V
@@ -634,11 +706,18 @@ bool Application::createShaders()
 VkPipeline Application::createGraphicsPipeline()
 {
 	// need to define a pipeline layout
+	VkPushConstantRange viewportPushConstantRange
+	{
+		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+		.offset = 0,
+		.size = sizeof(Viewport)
+	};
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 		.setLayoutCount = 0,
-		.pushConstantRangeCount = 0
+		.pushConstantRangeCount = 1,
+		.pPushConstantRanges = &viewportPushConstantRange
 	};
 	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
 	{
@@ -704,7 +783,7 @@ VkPipeline Application::createGraphicsPipeline()
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 		.polygonMode = VK_POLYGON_MODE_FILL,
 		.cullMode = VK_CULL_MODE_BACK_BIT,
-		.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+		.frontFace = VK_FRONT_FACE_CLOCKWISE,
 		.lineWidth = 1.0f,
 	};
 
@@ -994,18 +1073,48 @@ void Application::render()
 
 		VkRect2D scissor
 		{
-			.offset{.x = 0, .y = 0 },
-			.extent{.width = swapchainWidth, .height = swapchainHeight}
+			.offset{ .x = 0, .y = 0 },
+			.extent{ .width = swapchainWidth, .height = swapchainHeight }
 		};
 		vkCmdSetScissor(res.commandBuffer, 0, 1, &scissor);
 
-		// draw our triangle
-		vkCmdBindPipeline(res.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-		vkCmdDraw(res.commandBuffer, 3, 1, 0, 0);
-	}
-	// end dynamic rendering
-	vkCmdEndRendering(res.commandBuffer);
+		// Draw our particles
+		vkCmdBindPipeline(
+			res.commandBuffer,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			pipeline
+		);
 
+		const float xScale =
+			static_cast<float>(swapchainHeight) /
+			static_cast<float>(swapchainWidth);
+
+		// Initialize only once, across frames.
+		static const auto startTime = std::chrono::steady_clock::now();
+
+		float elapsedTime = std::chrono::duration<float>(
+			std::chrono::steady_clock::now() - startTime
+		).count();
+
+		Viewport viewportData{
+		.xScale = xScale,
+		.time = elapsedTime
+		};
+
+		vkCmdPushConstants(
+			res.commandBuffer,
+			pipelineLayout,
+			VK_SHADER_STAGE_VERTEX_BIT,
+			0,
+			sizeof(Viewport),
+			&viewportData
+		);
+
+		vkCmdDraw(res.commandBuffer, 300, 1, 0, 0);
+
+		// End dynamic rendering
+		vkCmdEndRendering(res.commandBuffer);
+	}
 	// transition the image from color attachment to presentation so we can show it
 	VkImageMemoryBarrier2 presentLayoutBarrier
 	{

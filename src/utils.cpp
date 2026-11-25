@@ -1,11 +1,17 @@
 #include "utils.h"
-
+#include "application.h"
 #include <SDL3/SDL.h>
 #include <fstream>
 #include <sstream>
 
-void showError(SDL_Window *window, const std::string &errorMessasge)
+void Application::showError(const std::string& errorMessage) const
 {
+	SDL_ShowSimpleMessageBox(
+		SDL_MESSAGEBOX_ERROR,
+		"Error",
+		errorMessage.c_str(),
+		window
+	);
 }
 
 std::string readTextFile(const std::string &filePath)
