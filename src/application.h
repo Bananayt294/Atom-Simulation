@@ -8,6 +8,7 @@
 #include <array>
 #include <string>
 #include <shaderc/shaderc.hpp>
+#include "camera.h"
 
 struct SDL_Window;
 struct VmaAllocator_T;
@@ -24,14 +25,18 @@ struct FrameResources
 
 class Application
 {
+	Camera camera;
 	constexpr static uint32_t VulkanVersion{ VK_API_VERSION_1_4 };
 	constexpr static uint32_t MaxFramesInFlight{ 2 };
 	constexpr static VkFormat swapchainFormat{ VK_FORMAT_B8G8R8A8_SRGB };
 	constexpr static VkFormat depthFormat{ VK_FORMAT_D32_SFLOAT };
+	bool mouseCaptured = false;
+	float movementSpeed = 2.5f;
+	float mouseSensitivity = 0.12f;
 
-	struct Viewport {
-		float xScale;
-		float time;
+	struct alignas(16) Viewport {
+		glm::mat4 viewProjection{ 1.0f };
+		glm::vec4 params{ 0.0f };
 	};
 	SDL_Window* window = nullptr;
 	uint32_t width = 1280;

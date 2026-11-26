@@ -165,20 +165,105 @@ void Application::run()
 	while (running)
 	{
 		SDL_Event event{ 0 };
-		while (SDL_PollEvent(&event))
-		{
-			if (event.type == SDL_EVENT_QUIT)
-			{
+		static auto previousFrameTime =
+			std::chrono::steady_clock::now();
+
+		auto currentFrameTime =
+			std::chrono::steady_clock::now();
+
+		float deltaTime =
+			std::chrono::duration<float>(
+				currentFrameTime - previousFrameTime
+			).count();
+
+		previousFrameTime = currentFrameTime;
+
+		// Avoid unusually large movement after a frame stall.
+		deltaTime = std::min(deltaTime, 0.1f);
+		while (SDL_PollEvent(&event)) {
+			switch (event.type) {
+
+			case SDL_EVENT_QUIT:
 				running = false;
 				break;
-			}
-			else if (event.type == SDL_EVENT_WINDOW_RESIZED)
-			{
-				width = event.window.data1;
-				height = event.window.data2;
-				requireSwapchainRecreate = true;
+
+			case SDL_EVENT_KEY_DOWN:
+
+				// Toggle mouse capture with Tab.
+				if (event.key.key == SDLK_TAB && !event.key.repeat) {
+					mouseCaptured = !mouseCaptured;
+
+					if (!SDL_SetWindowRelativeMouseMode(window, mouseCaptured)) {
+						SDL_Log("Mouse mode error: %s", SDL_GetError());
+						mouseCaptured =
+							SDL_GetWindowRelativeMouseMode(window);
+					}
+				}
+
+				// Release the mouse with Escape.
+				if (event.key.key == SDLK_ESCAPE && mouseCaptured) {
+					mouseCaptured = false;
+					SDL_SetWindowRelativeMouseMode(window, false);
+				}
+
+				break;
+
+			case SDL_EVENT_MOUSE_MOTION:
+
+				if (mouseCaptured) {
+					float mouseX = static_cast<float>(event.motion.xrel);
+					float mouseY = static_cast<float>(event.motion.yrel);
+
+					camera.rotate(
+						mouseX * mouseSensitivity,
+						-mouseY * mouseSensitivity
+					);
+				}
+
 				break;
 			}
+		}
+		const bool* keys = SDL_GetKeyboardState(nullptr);
+
+		float forward = 0.0f;
+		float right = 0.0f;
+		float vertical = 0.0f;
+
+		if (keys[SDL_SCANCODE_W]) forward += 1.0f;
+		if (keys[SDL_SCANCODE_S]) forward -= 1.0f;
+
+		if (keys[SDL_SCANCODE_D]) right += 1.0f;
+		if (keys[SDL_SCANCODE_A]) right -= 1.0f;
+
+		if (keys[SDL_SCANCODE_SPACE]) vertical += 1.0f;
+
+		if (keys[SDL_SCANCODE_LCTRL] ||
+			keys[SDL_SCANCODE_RCTRL]) {
+			vertical -= 1.0f;
+		}
+
+		float speed = movementSpeed;
+
+		if (keys[SDL_SCANCODE_LSHIFT] ||
+			keys[SDL_SCANCODE_RSHIFT]) {
+			speed *= 2.0f;
+		}
+
+		// Normalize diagonal movement.
+		float magnitude = std::sqrt(
+			forward * forward +
+			right * right +
+			vertical * vertical
+		);
+
+		if (magnitude > 0.0f) {
+			forward /= magnitude;
+			right /= magnitude;
+			vertical /= magnitude;
+
+			camera.moveForward(forward * speed * deltaTime);
+			camera.moveRight(right * speed * deltaTime);
+			camera.moveUp(vertical * speed * deltaTime);
 		}
 
 		render();
@@ -782,7 +867,7 @@ VkPipeline Application::createGraphicsPipeline()
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 		.polygonMode = VK_POLYGON_MODE_FILL,
-		.cullMode = VK_CULL_MODE_BACK_BIT,
+		.cullMode = VK_CULL_MODE_NONE,
 		.frontFace = VK_FRONT_FACE_CLOCKWISE,
 		.lineWidth = 1.0f,
 	};
@@ -1086,8 +1171,8 @@ void Application::render()
 		);
 
 		const float xScale =
-			static_cast<float>(swapchainHeight) /
-			static_cast<float>(swapchainWidth);
+			static_cast<float>(swapchainWidth) /
+			static_cast<float>(swapchainHeight);
 
 		// Initialize only once, across frames.
 		static const auto startTime = std::chrono::steady_clock::now();
@@ -1096,10 +1181,13 @@ void Application::render()
 			std::chrono::steady_clock::now() - startTime
 		).count();
 
-		Viewport viewportData{
-		.xScale = xScale,
-		.time = elapsedTime
-		};
+		glm::mat4 view = camera.getViewMatrix();
+		glm::mat4 projection = camera.getProjectionMatrix(xScale);
+
+		Viewport viewportData{};
+		viewportData.viewProjection = projection * view;
+		viewportData.params.x = elapsedTime;
+
 
 		vkCmdPushConstants(
 			res.commandBuffer,
@@ -1110,7 +1198,7 @@ void Application::render()
 			&viewportData
 		);
 
-		vkCmdDraw(res.commandBuffer, 900, 1, 0, 0);
+		vkCmdDraw(res.commandBuffer, 1800, 1, 0, 0);
 
 		// End dynamic rendering
 		vkCmdEndRendering(res.commandBuffer);

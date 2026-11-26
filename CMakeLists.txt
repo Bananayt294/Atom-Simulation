@@ -13,7 +13,8 @@ add_executable(vulkanapp
     src/application.cpp
     src/utils.h
     src/utils.cpp
-)
+    src/camera.cpp
+    src/camera.h)
 
 target_compile_definitions(vulkanapp PRIVATE
     "ATOM_SHADER_DIR=\"${CMAKE_SOURCE_DIR}/src/shaders\""
