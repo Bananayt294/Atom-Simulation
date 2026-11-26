@@ -34,10 +34,12 @@ class Application
 	float movementSpeed = 2.5f;
 	float mouseSensitivity = 0.12f;
 
-	struct alignas(16) Viewport {
-		glm::mat4 viewProjection{ 1.0f };
+	struct alignas(16) RaymarchPushConstants {
+		glm::mat4 inverseViewProjection{ 1.0f };
+		glm::vec4 cameraPosition{ 0.0f };
 		glm::vec4 params{ 0.0f };
 	};
+	static_assert(sizeof(RaymarchPushConstants) == 96);
 	SDL_Window* window = nullptr;
 	uint32_t width = 1280;
 	uint32_t height = 720;

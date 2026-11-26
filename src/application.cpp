@@ -788,15 +788,17 @@ bool Application::createShaders()
 	return true;
 }
 
+
 VkPipeline Application::createGraphicsPipeline()
 {
-	// need to define a pipeline layout
+	// Pipeline layout
 	VkPushConstantRange viewportPushConstantRange
 	{
-		.stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
 		.offset = 0,
-		.size = sizeof(Viewport)
+		.size = sizeof(RaymarchPushConstants)
 	};
+
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -804,14 +806,22 @@ VkPipeline Application::createGraphicsPipeline()
 		.pushConstantRangeCount = 1,
 		.pPushConstantRanges = &viewportPushConstantRange
 	};
-	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+
+	if (vkCreatePipelineLayout(
+		device,
+		&pipelineLayoutInfo,
+		nullptr,
+		&pipelineLayout
+	) != VK_SUCCESS)
 	{
 		showError("Unable to create the pipeline layout");
 		return nullptr;
 	}
 
-	// configure the shader stages struct
-	const char *entryPoint = "main";
+
+	// Shader stages
+	const char* entryPoint = "main";
+
 	std::vector<VkPipelineShaderStageCreateInfo> shaderStages
 	{
 		{
@@ -828,31 +838,42 @@ VkPipeline Application::createGraphicsPipeline()
 		}
 	};
 
-	// vertex pulling, don't define vertex input details
+
+	// Vertex input: procedural geometry.
 	VkPipelineVertexInputStateCreateInfo vertInputInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO
 	};
 
-	// input assembly, we'll be drawing triangle lists
+
+	// Input assembly
 	VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 		.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
 	};
 
-	// depth/stencil configuration
+
+	// Depth configuration
 	VkPipelineDepthStencilStateCreateInfo depthStencilInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-		.depthTestEnable = VK_TRUE,
-		.depthWriteEnable = VK_TRUE,
-		.depthCompareOp = VK_COMPARE_OP_LESS,
+
+		.depthTestEnable = VK_FALSE,
+
+		// Important for transparent particles:
+		// test depth, but don't prevent later particles
+		// from contributing to the cloud.
+		.depthWriteEnable = VK_FALSE,
+
+		.depthCompareOp = VK_COMPARE_OP_ALWAYS,
+
+		.depthBoundsTestEnable = VK_FALSE,
 		.stencilTestEnable = VK_FALSE
 	};
 
-	// dynamic rendering allows to set this up...dynamically
-	// we still need this struct though
+
+	// Dynamic viewport and scissor
 	VkPipelineViewportStateCreateInfo viewportInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -862,31 +883,43 @@ VkPipeline Application::createGraphicsPipeline()
 		.pScissors = nullptr
 	};
 
-	// rasterizer settings
+
+	// Rasterizer
 	VkPipelineRasterizationStateCreateInfo rasterInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 		.polygonMode = VK_POLYGON_MODE_FILL,
+
+		// Billboard quads must be visible from both sides.
 		.cullMode = VK_CULL_MODE_NONE,
+
 		.frontFace = VK_FRONT_FACE_CLOCKWISE,
-		.lineWidth = 1.0f,
+		.lineWidth = 1.0f
 	};
 
-	// No multisampling
+
+	// Multisampling
 	VkPipelineMultisampleStateCreateInfo multiSampleInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
 		.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT
 	};
 
-	// Alpha-blending (disabled for now), still need
-	// attachment info and write mask
+
+	// ========================================================
+	// ADDITIVE BLENDING
+	// ========================================================
+
 	VkPipelineColorBlendAttachmentState attachState
 	{
 		.blendEnable = VK_FALSE,
-		.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-			VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+		.colorWriteMask =
+			VK_COLOR_COMPONENT_R_BIT |
+			VK_COLOR_COMPONENT_G_BIT |
+			VK_COLOR_COMPONENT_B_BIT |
+			VK_COLOR_COMPONENT_A_BIT
 	};
+
 	VkPipelineColorBlendStateCreateInfo blendInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
@@ -894,19 +927,24 @@ VkPipeline Application::createGraphicsPipeline()
 		.pAttachments = &attachState
 	};
 
-	// enable dynamic state
+
+	// Dynamic state
 	std::vector<VkDynamicState> dynamicState
 	{
-		VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR
+		VK_DYNAMIC_STATE_VIEWPORT,
+		VK_DYNAMIC_STATE_SCISSOR
 	};
+
 	VkPipelineDynamicStateCreateInfo dynamicStateInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-		.dynamicStateCount = static_cast<uint32_t>(dynamicState.size()),
+		.dynamicStateCount =
+			static_cast<uint32_t>(dynamicState.size()),
 		.pDynamicStates = dynamicState.data()
 	};
 
-	// structure required for dynamic rendering
+
+	// Dynamic rendering configuration
 	VkPipelineRenderingCreateInfo renderInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
@@ -915,13 +953,16 @@ VkPipeline Application::createGraphicsPipeline()
 		.depthAttachmentFormat = depthFormat
 	};
 
-	// Create the graphics pipeline
+
+	// Graphics pipeline
 	VkGraphicsPipelineCreateInfo pipelineInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
 		.pNext = &renderInfo,
+
 		.stageCount = static_cast<uint32_t>(shaderStages.size()),
 		.pStages = shaderStages.data(),
+
 		.pVertexInputState = &vertInputInfo,
 		.pInputAssemblyState = &inputAssemblyInfo,
 		.pViewportState = &viewportInfo,
@@ -930,14 +971,24 @@ VkPipeline Application::createGraphicsPipeline()
 		.pDepthStencilState = &depthStencilInfo,
 		.pColorBlendState = &blendInfo,
 		.pDynamicState = &dynamicStateInfo,
+
 		.layout = pipelineLayout,
-		.renderPass = VK_NULL_HANDLE,
+		.renderPass = VK_NULL_HANDLE
 	};
-	if (vkCreateGraphicsPipelines(device, nullptr, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS)
+
+	if (vkCreateGraphicsPipelines(
+		device,
+		nullptr,
+		1,
+		&pipelineInfo,
+		nullptr,
+		&pipeline
+	) != VK_SUCCESS)
 	{
 		showError("Error creating the pipeline");
 		return nullptr;
 	}
+
 	return pipeline;
 }
 
@@ -1147,62 +1198,92 @@ void Application::render()
 	// begin dynamic rendering
 	vkCmdBeginRendering(res.commandBuffer, &renderingInfo);
 	{
-		// set the viewpot and scissor state
+		// Viewport
 		VkViewport viewport
 		{
-			.x = 0, .y = 0,
+			.x = 0.0f,
+			.y = 0.0f,
 			.width = static_cast<float>(swapchainWidth),
-			.height = static_cast<float>(swapchainHeight)
+			.height = static_cast<float>(swapchainHeight),
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f
 		};
-		vkCmdSetViewport(res.commandBuffer, 0, 1, &viewport);
 
+		vkCmdSetViewport(
+			res.commandBuffer, 0, 1, &viewport
+		);
+
+		// Scissor
 		VkRect2D scissor
 		{
 			.offset{ .x = 0, .y = 0 },
-			.extent{ .width = swapchainWidth, .height = swapchainHeight }
+			.extent{
+				.width = swapchainWidth,
+				.height = swapchainHeight
+			}
 		};
-		vkCmdSetScissor(res.commandBuffer, 0, 1, &scissor);
 
-		// Draw our particles
+		vkCmdSetScissor(
+			res.commandBuffer, 0, 1, &scissor
+		);
+
+		// Bind graphics pipeline
 		vkCmdBindPipeline(
 			res.commandBuffer,
 			VK_PIPELINE_BIND_POINT_GRAPHICS,
 			pipeline
 		);
 
-		const float xScale =
+		const float aspectRatio =
 			static_cast<float>(swapchainWidth) /
 			static_cast<float>(swapchainHeight);
 
-		// Initialize only once, across frames.
-		static const auto startTime = std::chrono::steady_clock::now();
-
-		float elapsedTime = std::chrono::duration<float>(
-			std::chrono::steady_clock::now() - startTime
-		).count();
-
 		glm::mat4 view = camera.getViewMatrix();
-		glm::mat4 projection = camera.getProjectionMatrix(xScale);
 
-		Viewport viewportData{};
-		viewportData.viewProjection = projection * view;
-		viewportData.params.x = elapsedTime;
+		glm::mat4 projection =
+			camera.getProjectionMatrix(aspectRatio);
+
+		glm::mat4 viewProjection =
+			projection * view;
+
+
+		RaymarchPushConstants pushConstants{};
+
+		pushConstants.inverseViewProjection =
+			glm::inverse(viewProjection);
+
+		pushConstants.cameraPosition =
+			glm::vec4(camera.getPosition(), 1.0f);
+
+		pushConstants.params = glm::vec4(
+			static_cast<float>(swapchainWidth),
+			static_cast<float>(swapchainHeight),
+			0.10f,
+			2.2f
+		);
 
 
 		vkCmdPushConstants(
 			res.commandBuffer,
 			pipelineLayout,
-			VK_SHADER_STAGE_VERTEX_BIT,
+			VK_SHADER_STAGE_FRAGMENT_BIT,
 			0,
-			sizeof(Viewport),
-			&viewportData
+			sizeof(RaymarchPushConstants),
+			&pushConstants
 		);
 
-		vkCmdDraw(res.commandBuffer, 1800, 1, 0, 0);
 
-		// End dynamic rendering
-		vkCmdEndRendering(res.commandBuffer);
+		vkCmdDraw(
+			res.commandBuffer,
+			3,
+			1,
+			0,
+			0
+		);
+
 	}
+
+	vkCmdEndRendering(res.commandBuffer);
 	// transition the image from color attachment to presentation so we can show it
 	VkImageMemoryBarrier2 presentLayoutBarrier
 	{

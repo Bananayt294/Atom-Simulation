@@ -8,7 +8,7 @@ public:
     glm::mat4 getProjectionMatrix(float aspectRatio) const;
 
     void setPosition(const glm::vec3& newPosition);
-
+    glm::vec3 getPosition() const;
     void moveForward(float amount);
     void moveRight(float amount);
     void moveUp(float amount);

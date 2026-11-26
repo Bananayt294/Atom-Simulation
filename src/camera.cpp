@@ -5,6 +5,10 @@
 #include <algorithm>
 #include <cmath>
 
+glm::vec3 Camera::getPosition() const {
+    return position;
+}
+
 glm::mat4 Camera::getViewMatrix() const {
     return glm::lookAtRH(
         position,
